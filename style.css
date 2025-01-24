@@ -4,6 +4,8 @@
 }
 
 body {
+    box-sizing: border-box;
+    padding: 0;
     text-align: center;
     background-color: rgb(255, 246, 194);
 }
@@ -56,6 +58,7 @@ h1 {
     gap: 1px;
     grid-template-columns: repeat(3, 1fr);
     background-color: red;
+    margin: 0;
 }
 
 #board button {
@@ -64,6 +67,17 @@ h1 {
     font-size: 40px;
     font-weight: bold;
     background-color: burlywood;
+}
+
+@media screen and (max-width: 450px) {
+    #board {
+        width: 99vw;
+    }
+    
+    #board button {
+        width: 33vw;
+        height: 33vw;
+    }
 }
 
 #board button:hover {
