@@ -1,0 +1,78 @@
+
+.hidden, #game.hidden {
+    display: none;
+}
+
+body {
+    text-align: center;
+    background-color: rgb(255, 246, 194);
+}
+
+.title {
+    margin: auto;
+    width: fit-content;
+}
+
+.title::after {
+    display: block;
+    margin-top: 5px;
+    background-color: crimson;
+    content: "";
+    height: 5px;
+    width: auto;
+}
+
+h1 {
+    color: rgb(59, 48, 34);
+    margin: 0;
+}
+
+#findPlayerSection {
+    margin: 20px;
+}
+
+.uiBtn {
+    margin: 20px;
+    padding: 10px;
+    background-color: rgb(235, 84, 114);
+    font-size: 20px;
+    border: crimson 2px solid;
+    border-radius: 10px;
+}
+
+#loadingImg {
+    width: 80px;
+}
+
+#game {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#board {
+    display: grid;
+    width: min-content;
+    gap: 1px;
+    grid-template-columns: repeat(3, 1fr);
+    background-color: red;
+}
+
+#board button {
+    width: 150px;
+    height: 150px;
+    font-size: 40px;
+    font-weight: bold;
+    background-color: burlywood;
+}
+
+#board button:hover {
+    background-color: rgb(187, 157, 117);
+}
+
+#winnerDisplay {
+    font-size: 40px;
+    font-weight: bold;
+    padding: 0;
+    margin: 10px;
+}

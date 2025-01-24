@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="title">
+        <h1>Tic Tac Toe App</h1>
+    </div>
+    
+    <div id="findPlayerSection">
+        <label for="usernameIn">Enter username:</label>
+        <input type="text" id="usernameIn" name="usernameIn">
+        <br>
+        <button id="findBtn" class="uiBtn">Search for Another Player</button>
+    </div>
+    <br>
+
+    <img id="loadingImg" src="./images/loading.gif" alt="loading..." class="hidden">
+
+    <div id="gameInfo" class="hidden">
+        <p>Your name: <span id="usernameDisplay">???</span></p>
+        <p>Opponent name: <span id="opponentDisplay">???</span></p>
+        <br>
+
+        <p>You are playing as <span id="playerTag">X</span></p>
+        <p><span id="turnDisplay">?</span>'s Turn</p>
+        <br>
+    </div>
+
+    <div id="game" class="hidden">
+        <div id="board">
+            <button id="slot1" class="slot"></button>
+            <button id="slot2" class="slot"></button>
+            <button id="slot3" class="slot"></button>
+            <button id="slot4" class="slot"></button>
+            <button id="slot5" class="slot"></button>
+            <button id="slot6" class="slot"></button>
+            <button id="slot7" class="slot"></button>
+            <button id="slot8" class="slot"></button>
+            <button id="slot9" class="slot"></button>
+        </div>
+    </div>
+
+    <p id="winnerDisplay" class="hidden"></p>
+    <button id="newGameBtn" class="uiBtn hidden" onclick="prepareFindPlayer();">New Game</button>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const globals = {};
+
+        function prepareFindPlayer() {
+            // Show the find player section.
+            document.getElementById("findPlayerSection").classList.remove("hidden");
+
+            // Enable the 'Find Player' button.
+            document.getElementById("findBtn").disabled = false;
+
+            // Hide game information and board.
+            document.getElementById("gameInfo").classList.add("hidden");
+            document.getElementById("game").classList.add("hidden");
+
+            // Hide winner display.
+            document.getElementById("winnerDisplay").classList.add("hidden");
+
+            // Hide 'New Game' button.
+            document.getElementById("newGameBtn").classList.add("hidden");
+        }
+
+        function startFindingPlayer() {
+            document.getElementById("findBtn").disabled = true;
+            document.getElementById("loadingImg").classList.remove("hidden");
+        }
+
+        function prepareGame(game) {
+            document.getElementById("findPlayerSection").classList.add("hidden");
+            document.getElementById("loadingImg").classList.add("hidden");
+
+            // Clear the board in-case it was filled in a previous game.
+            clearBoardDisplay();
+
+            // Update name and tag labels.
+            if (globals.ownName === game.p1.name) {
+                globals.ownTag = game.p1.tag;
+                globals.oppName = game.p2.name;
+            } else {
+                globals.ownTag = game.p2.tag;
+                globals.oppName = game.p1.name;
+            }
+
+            document.getElementById("usernameDisplay").innerText = globals.ownName;
+            document.getElementById("playerTag").innerText = globals.ownTag;
+            document.getElementById("opponentDisplay").innerText = globals.oppName;
+
+            // Update the turn display on the client.
+            document.getElementById("turnDisplay").innerText = game.turn;
+
+            // Show game information and game board.
+            document.getElementById("gameInfo").classList.remove("hidden");
+            document.getElementById("game").classList.remove("hidden");
+        }
+
+        function clearBoardDisplay() {
+            for (let i = 0; i < 9; i++) {
+                document.getElementById("board").children[i].innerText = "";
+            }
+        }
+
+        function updateBoardDisplay(board) {
+            for (let i = 0; i < 9; i++) {
+                const row = Math.floor(i / 3);
+                const col = i % 3;
+
+                document.getElementById("board").children[i].innerText = board[row][col];
+            }
+        }
+
+        function finishGame(winner) {
+            const winnerMsg = `The winner was ${winner}.`;
+
+            const winnerDisplay = document.getElementById("winnerDisplay");
+            winnerDisplay.innerText = winnerMsg;
+            winnerDisplay.classList.remove("hidden");
+
+            // Hide game information.
+            document.getElementById("gameInfo").classList.add("hidden");
+            
+            // Show the 'New Game' button.
+            document.getElementById("newGameBtn").classList.remove("hidden");
+        }
+
+        document.getElementById("findBtn").addEventListener("click", () => {
+            globals.ownName = document.getElementById("usernameIn").value;
+
+            if (!globals.ownName) {
+                window.alert("Error: please enter a name");
+                return;
+            }
+            
+            // Tell the player to authenticate this client.
+            socket.emit("auth");
+            startFindingPlayer();
+        });
+
+        socket.on("authResponse", ({ playerID }) => {
+            globals.playerID = playerID;
+
+            // Start finding a player.
+            socket.emit("findPlayer", { name: globals.ownName, playerID });
+
+            console.log(globals.playerID);
+        });
+
+        socket.on("foundGame", (game) => {
+            prepareGame(game);
+
+            // Initialize board functionality.
+            for (let i = 1; i <= 9; i++) {
+                document.getElementById("board").children[i - 1].addEventListener("click", () => {
+                    socket.emit("performMove", { id: game.id, move: i, name: globals.ownName });
+                });
+            }
+        });
+
+        socket.on("moveResponse", (game) => {
+            // Update the turn display on the client.
+            document.getElementById("turnDisplay").innerText = game.turn;
+
+            // Fill in the board on the client.
+            updateBoardDisplay(game.board);
+        });
+
+        socket.on("gameFinished", ({ winner }) => {
+            finishGame(winner);
+        });
+    </script>
+</body>
+</html>
