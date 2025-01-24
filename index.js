@@ -17,6 +17,16 @@ function generateGameID() {
     return Math.random().toString().substring(2);
 }
 
+function fetchWaitingPlayer(waitingPlayers) {
+    const playerIDs = Object.keys(waitingPlayers);
+    const randomID = playerIDs[(Math.random() * playerIDs.length) << 0];
+
+    const randomPlayer = waitingPlayers[randomID];
+
+    delete waitingPlayers[randomID];
+    return randomPlayer;
+}
+
 function detWinnerOfLine(slots) {
     let maybeWinner = slots[0];
     return slots.every((slot) => slot === maybeWinner);
@@ -67,90 +77,111 @@ function tryDetermineWinner(board) {
 
 const globals = {
     games: {},
-    activePlayers: {},
-    waitingPlayers: [],
+    players: {},
+    waitingPlayers: {},
 };
 
 io.on("connection", (socket) => {
-    socket.on("auth", () => {
-        const playerID = socket.id;
-        socket.join(playerID);
-
-        globals.activePlayers[playerID] = {};
-
-        io.to(playerID).emit("authResponse", { playerID });
-    });
-
     socket.on("disconnect", (_reason) => {
         const playerID = socket.id;
 
-        if (!globals.activePlayers[playerID]) {
+        if (!globals.players[playerID]) {
             return;
         }
-        socket.leave(playerID);
-        delete globals.activePlayers[playerID];
+        delete globals.players[playerID];
+
+        if (!globals.waitingPlayers[playerID]) {
+            return;
+        }
+        delete globals.waitingPlayers[playerID];
     });
 
-    socket.on("findPlayer", (player) => {
-        if (!player.name) {
+    socket.on("findPlayer", ({ name }) => {
+        if (!name) {
+            io.to(socket.id).emit("error", { message: "invalid name" });
             return;
         }
+        globals.players[socket.id] = { name };
+        globals.waitingPlayers[socket.id] = { socket, name };
 
-        globals.waitingPlayers.push({socket, name: player.name});
-
-        if (globals.waitingPlayers.length >= 2) {
-            const conn1 = globals.waitingPlayers.pop();
-            const conn2 = globals.waitingPlayers.pop();
+        if (Object.keys(globals.waitingPlayers).length >= 2) {
+            const conn1 = fetchWaitingPlayer(globals.waitingPlayers);
+            const conn2 = fetchWaitingPlayer(globals.waitingPlayers);
 
             const p1 = {
+                id: conn1.socket.id,
                 name: conn1.name,
                 tag: "X"
             };
 
             const p2 = {
+                id: conn2.socket.id,
                 name: conn2.name,
                 tag: "O"
             };
 
             // Generate a random game ID.
-            const id = generateGameID();
+            const gameID = generateGameID();
 
             const game = { 
-                id, p1, p2, 
-                turn: "X", 
-                board: [
-                    ["", "", ""], 
-                    ["", "", ""], 
-                    ["", "", ""]
-                ],
-                finished: false
+                p1, p2, 
+                client: {
+                    id: gameID,
+                    turn: "X", 
+                    board: [
+                        ["", "", ""], 
+                        ["", "", ""], 
+                        ["", "", ""]
+                    ],
+                    finished: false
+                }
             };
-            globals.games[id] = game;
+            globals.games[gameID] = game;
 
             // Join the connections in the same room.
-            conn1.socket.join(id);
-            conn2.socket.join(id);
+            conn1.socket.join(gameID);
+            conn2.socket.join(gameID);
 
-            io.to(id).emit("foundGame", game);
+            // Tell each player some information about the game.
+            conn1.socket.emit("foundGame", {
+                game: game.client,
+                ownTag: game.p1.tag,
+                oppName: game.p2.name,
+                oppTag: game.p2.tag,
+            });
+            conn2.socket.emit("foundGame", { 
+                game: game.client,
+                ownTag: game.p2.tag,
+                oppName: game.p1.name, 
+                oppTag: game.p1.tag,
+            });
         }
     });
     
-    socket.on("performMove", ({ id, move, name }) => {
+    socket.on("performMove", ({ id, move }) => {
+        if (!(id in globals.games)) {
+            return;
+        }
+
         const game = globals.games[id];
-        
-        if (game.finished) {
+        const game_client = game.client;
+        const playerID = socket.id;
+
+        if (game_client.finished) {
             return;
         }
 
         let tag;
 
-        if (name === game.p1.name) {
+        if (playerID === game.p1.id) {
             tag = game.p1.tag;
-        } else if (name === game.p2.name) {
+        } else if (playerID === game.p2.id) {
             tag = game.p2.tag;
+        } else {
+            return; // unknown player
         }
 
-        if (tag === game.turn) {
+        if (tag === game_client.turn) {
             if (move < 0 || move > 9) {
                 return;
             }
@@ -158,24 +189,24 @@ io.on("connection", (socket) => {
             const row = Math.floor((move - 1) / 3);
             const col = (move - 1) % 3;
 
-            if (game.board[row][col] != "") {
+            if (game_client.board[row][col] != "") {
                 return;
             }
             // Update the board.
-            game.board[row][col] = tag;
+            game_client.board[row][col] = tag;
 
             // Check if there was a winner.
-            const winner = tryDetermineWinner(game.board);
+            const winner = tryDetermineWinner(game_client.board);
             if (winner) {
-                game.finished = true;
+                game_client.finished = true;
                 io.to(id).emit("gameFinished", {winner});
             }
 
             // Toggle the turn.
-            game.turn = (game.turn === "X") ? "O" : "X";
+            game_client.turn = (game_client.turn === "X") ? "O" : "X";
 
             // Return the updated game state to the connections in the room.
-            io.to(id).emit("moveResponse", game);
+            io.to(id).emit("moveResponse", game_client);
         }
     });
 });
